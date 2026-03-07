@@ -12,7 +12,7 @@ declare global {
     }
 }
 
-const upload = multer({dest: "/uploads"})
+const upload = multer({dest: "uploads"})
 
 
 const app = express()
