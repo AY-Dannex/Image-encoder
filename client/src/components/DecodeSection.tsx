@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { useRef, useState } from "react";
 import { toast } from "react-toastify";
 
@@ -22,21 +22,23 @@ const DecodeSection = () => {
     return imagePresent;
   };
 
-  const { isPending, mutateAsync } = useMutation<{text: string}>({
+  const { isPending, mutateAsync } = useMutation<{ text: string }>({
     mutationFn: async () => {
       const formValid = validateFormInfo();
       if (!formValid) throw new Error("Invalid form data");
       const formData = new FormData();
       formData.append("image", formInfo.image?.[0]);
-      const res = await axios.post<{text: string}>("/decode", formData);
+      const res = await axios.post<{ text: string }>("/decode", formData);
       return res.data;
     },
     onSuccess: (data) => {
       setDisplayText((state) => ({ ...state, decoded: data.text }));
       toast.success("Image Decoded");
     },
-    onError: () => {
-      toast.error("Decoding Failed");
+    onError: (err) => {
+      if ((err as AxiosError<{message: string}>).response?.data?.message === "Unrecognised encoding")
+        toast.error("No message has been encoded into this image");
+      else toast.error("Decoding Failed");
     },
   });
 
@@ -100,11 +102,13 @@ const DecodeSection = () => {
           clip.writeText(displayText.decoded);
           setDisplayText((state) => ({ ...state, copyText: "Copied" }));
           // Revert button text after a short confirmation window.
-          setTimeout(() =>
-            setDisplayText((state) => ({
-              ...state,
-              copyText: "Copy to Clipboard",
-            })), 2000
+          setTimeout(
+            () =>
+              setDisplayText((state) => ({
+                ...state,
+                copyText: "Copy to Clipboard",
+              })),
+            2000,
           );
         }}
         disabled={!(displayText.decoded.length > 0)}

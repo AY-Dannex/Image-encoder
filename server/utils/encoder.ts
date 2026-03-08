@@ -1,5 +1,28 @@
 import sharp from "sharp";
 
+function convertTextToBits(text: string = ""): string {
+  let bits = "";
+
+  for (let i = 0; i < text.length; i++)
+    bits += text.charCodeAt(i).toString(2).padStart(8, "0");
+
+  return bits;
+}
+
+function getLsb(
+  start: number,
+  end: number,
+  bitArray: number[] | Buffer,
+): string {
+  let lsb = "";
+  for (let i = start; i < end; i++) {
+    const currentByteBits = bitArray?.[i]?.toString(2).padStart(8, "0");
+    const modifiedBit = currentByteBits?.[currentByteBits.length - 1];
+    lsb += modifiedBit;
+  }
+
+  return lsb;
+}
 
 /**
  *
@@ -14,15 +37,13 @@ async function encodeImage(imagePath: string, message: string) {
   } = await sharp(imagePath).raw().toBuffer({ resolveWithObject: true });
   // Keep the first 512 bytes untouched; embed data after this offset.
   const imageBytes = Buffer.from(originalBytes.subarray(512));
-  let wordBits = "";
-
-  for (let i = 0; i < message.length; i++)
-    wordBits += message.charCodeAt(i).toString(2).padStart(8, "0");
+  const wordBits = convertTextToBits(message);
+  const magic = convertTextToBits("MAXSTEG");
 
   const messageLength = wordBits.length.toString(2).padStart(32, "0");
 
   // Prefix payload with 32-bit length, then write one bit per pixel byte.
-  const fullEncoding = messageLength + wordBits;
+  const fullEncoding = magic + messageLength + wordBits;
   for (let i = 0; i < fullEncoding.length; i++) {
     let currentByteBits = imageBytes?.[i]?.toString(2).padStart(8, "0");
     const modifiedBits =
@@ -52,35 +73,33 @@ async function decodeImage(imagePath: string) {
   // Read from the same offset used while encoding.
   const imageBytes = Buffer.from(originalBytes.subarray(512));
 
-  let messageLength = "";
+  const magic =
+    Array.from(imageBytes?.subarray(0, 56))
+      ?.map((int: number) => int?.toString(2)?.padStart(8, "0")[7])
+      ?.join("")
+      ?.match(/.{1,8}/g)
+      ?.map((str: string) => parseInt(str, 2)) ?? [];
+
+  if (!magic || String.fromCharCode(...magic).trim() !== "MAXSTEG") {
+    throw new Error("Unrecognised encoding");
+  }
 
   // First 32 LSBs store payload bit-length.
-  for (let i = 0; i < 32; i++) {
-    let currentByteBits = imageBytes?.[i]?.toString(2).padStart(8, "0");
-    const modifiedBit = currentByteBits?.[currentByteBits.length - 1];
-    messageLength += modifiedBit;
-  }
+  const messageLength = getLsb(56, 32 + 56, imageBytes);
 
   const decodedMessageLength = parseInt(messageLength, 2);
 
-  let message = "";
-
   // Next bits represent the actual encoded message payload.
-  for (let i = 32; i < decodedMessageLength + 32; i++) {
-    let currentByteBits = imageBytes?.[i]?.toString(2).padStart(8, "0");
-    const modifiedBit = currentByteBits?.[currentByteBits.length - 1];
-    message += modifiedBit;
-  }
+  const message = getLsb(32 + 56, decodedMessageLength + 32 + 56, imageBytes);
 
-  let decodedMessage = "";
+  const mesageCharCodes =
+    message
+      .match(/.{1,8}/g)
+      ?.map((eightBitChar) => parseInt(eightBitChar, 2)) ?? [];
 
-  for (let charNum of message.match(/.{1,8}/g) ?? [])
-    decodedMessage += String.fromCharCode(parseInt(charNum, 2));
+  const decodedMessage = String.fromCharCode(...mesageCharCodes);
 
   return decodedMessage;
 }
 
-
-
 export { decodeImage, encodeImage };
-

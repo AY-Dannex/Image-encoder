@@ -21,8 +21,8 @@ const decodeTextInImage = async (req:Request, res: Response) => {
         const text = await decodeImage(req.file?.path ?? "")
         return res.status(200).json({text: text})
     } catch (err) {
-        console.log(err)
-        return res.status(500).json("Couldn't decode image")
+        console.log((err as Error).message)
+        return res.status(500).json({message: (err as Error).message ?? "Couldn't decode image"})
     }
 }
 

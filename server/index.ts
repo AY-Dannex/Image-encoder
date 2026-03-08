@@ -33,4 +33,4 @@ const port = Number(process.env.PORT) || 5050
 
 console.log(port)
 
-app.listen(port, "0.0.0.0", ()=>console.log("Server started on Port", port))
+app.listen(port, "0.0.0.0", ()=>console.log("Server started on Port", "127.0.0.1:" + port))
